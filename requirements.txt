@@ -6,3 +6,6 @@
 torch==2.9.1+cu128
 triton==3.5.1
 numpy
+
+# Optional, only for src/bench_flag_gems.py:
+# flag-gems==5.0.2  (needs g++ to build numpy 1.26.4 on Python 3.14)

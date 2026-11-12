@@ -1,6 +1,6 @@
 # flagos-add-rmsnorm
 
-FlagOS 课时 18「Module II 期末项目」的 Add + RMSNorm 融合算子实现与实测。用 Triton 写一个单次读写的融合 kernel，与 PyTorch 分步实现、`add` + 原生 `rms_norm` 两 kernel 做正确性和性能对比。
+FlagOS 课程中的 Add + RMSNorm 融合算子实现与实测。用 Triton 写一个单次读写的融合 kernel，与 PyTorch 分步实现、`add` + 原生 `rms_norm` 两 kernel 做正确性和性能对比。
 
 ## 实测结果
 
@@ -18,22 +18,30 @@ FlagOS 课时 18「Module II 期末项目」的 Add + RMSNorm 融合算子实现
 
 补充：N=8192 融合版 f32 1.875 ms、bf16 0.934 ms，约 1.51×；空 Triton kernel 单次 launch 约 13 µs（含 Python 调度）。
 
+FlagGems 5.0.2 对照（同进程、重复 3 轮取中位数）：f32 4096×4096 为 0.977 ms 对 1.052 ms（0.93×），bf16 0.504 ms 对 0.486 ms（1.04×），f32 4096×8192 为 2.013 ms 对 2.042 ms（0.99×）。FlagGems 原地执行、不分配输出，本文每次调用都分配 `out` / `new_r`，因此这个比较对本文不利。该轮 GPU SM 频率为 1560 MHz，绝对值不能和上表混用，只比较同轮倍率。
+
+反向传播：两个 Triton kernel，f32 下 `grad_x` / `grad_r` 最大绝对误差 4.8e-07，`grad_w` 6.1e-05（相对最大梯度 2.7e-07）；4096×4096 两个反向 kernel 耗时 2.044 ms（f32）、1.400 ms（bf16）。
+
 ## 目录
 
 ```text
 src/
-  fused_add_rms_norm.py   融合 kernel、分块版本、参考实现、两条基线
-  bench.py                正确性 + 性能
-  block_sweep.py          num_warps / BLOCK 扫描
-  launch_overhead.py      空 kernel launch 开销
-  smoke_triton.py         Triton 编译链路冒烟测试
+  fused_add_rms_norm.py    融合 kernel、分块版本、参考实现、两条基线
+  bench.py                 正确性 + 性能
+  bench_flag_gems.py       FlagGems 5.0.2 同口径对照
+  block_sweep.py           num_warps / BLOCK 扫描
+  launch_overhead.py       空 kernel launch 开销
+  backward_add_rms_norm.py 反向 kernel 与 autograd 封装
+  test_backward.py         反向正确性与耗时测试
+  smoke_triton.py          Triton 编译链路冒烟测试
 scripts/
-  setup_wsl.sh            WSL 环境安装
-  run_all.sh              跑数并归档日志
+  setup_wsl.sh             WSL 环境安装
+  run_all.sh               跑数并归档日志
 results/
-  parse_logs.py           日志转 summary.md
-  summary.md              实测数据汇总
-requirements.txt          依赖版本
+  parse_logs.py            日志转 summary.md
+  make_roofline.py         Roofline 手工估算图
+  summary.md               实测数据汇总
+requirements.txt           依赖版本
 ```
 
 ## 快速开始
@@ -65,6 +73,7 @@ cd src
 python bench.py
 python block_sweep.py
 python launch_overhead.py
+python test_backward.py --shapes 64x256,4096x4096 --time
 ```
 
 ### 3. 生成汇总
@@ -84,23 +93,29 @@ python results/parse_logs.py
 
 ## 数据说明
 
-`results/summary.md` 是实测汇总。`scripts/run_all.sh` 会把原始日志写到本地 `logs/`，该目录不提交到仓库；文章和截图也不随仓库发布。README 中的数字来自同一组实测日志。FlagGems 的 90% 目标没有实测，文中没有给出达到该目标的结论。
+`results/summary.md` 是实测汇总。`scripts/run_all.sh` 会把原始日志写到本地 `logs/`，该目录不提交到仓库；文章和截图也不随仓库发布。README 中的数字来自同一组实测日志。
+
+FlagGems 对照需要先安装 g++ 和 `flag-gems==5.0.2`（见 `src/bench_flag_gems.py` 文件头），再运行：
+
+```bash
+python src/bench_flag_gems.py --repeats 3 --log logs/flag_gems_bench.log
+```
 
 ## 测试条件
 
 | 项 | 配置 |
 |---|---|
 | GPU | NVIDIA RTX A4000 16GB，峰值带宽 448 GB/s |
-| 驱动 / CUDA | 616.92 / UMD 13.4 |
+| 驱动 / CUDA | KMD 616.92 / CUDA UMD 13.4 |
 | 系统 | Windows 11 + WSL2，Ubuntu 26.04 |
-| 软件 | Python 3.14，PyTorch 2.9.1+cu128，Triton 3.5.1 |
-| 形状 | `[4096, 4096]`，边界用例 N=1000 |
+| 软件 | Python 3.14，PyTorch 2.9.1+cu128，Triton 3.5.1，FlagGems 5.0.2 |
+| 形状 | `[4096, 4096]`，补充 4096×8192，边界用例 N=1000；反向补充 64×256、64×1000、100×256 |
 | dtype / eps | float32、bfloat16 / 1e-6 |
-| 计时 | 预热 50 次，计时 200 次，CUDA Event 平均 |
+| 计时 | 预热 50 次，计时 200 次，CUDA Event 平均；对照实验重复 3 轮取中位数 |
 
 ## 参考
 
-- FlagOS 课程课时 18：Module II 期末项目（RMSNorm + Residual 融合算子）
+- FlagOS 课程：RMSNorm + Residual 融合算子项目
 - [FlagGems](https://github.com/flagos-ai/FlagGems)
 - [Triton](https://triton-lang.org/)
 - [LLaMA](https://arxiv.org/abs/2302.13971)

@@ -16,6 +16,8 @@ FlagOS 课时 18「Module II 期末项目」的 Add + RMSNorm 融合算子实现
 
 正确性：f32 最大绝对误差 1.907e-06，bf16 为 1.562e-02（bf16 输出量化量级）；N=1000 的 mask 路径同样通过。计时为预热 50 次、计时 200 次、CUDA Event 平均。
 
+补充：N=8192 融合版 f32 1.875 ms、bf16 0.934 ms，约 1.51×；空 Triton kernel 单次 launch 约 13 µs（含 Python 调度）。
+
 ## 目录
 
 ```text
@@ -23,6 +25,7 @@ src/
   fused_add_rms_norm.py   融合 kernel、分块版本、参考实现、两条基线
   bench.py                正确性 + 性能
   block_sweep.py          num_warps / BLOCK 扫描
+  launch_overhead.py      空 kernel launch 开销
   smoke_triton.py         Triton 编译链路冒烟测试
 scripts/
   setup_wsl.sh            WSL 环境安装
@@ -61,6 +64,7 @@ source .venv/bin/activate
 cd src
 python bench.py
 python block_sweep.py
+python launch_overhead.py
 ```
 
 ### 3. 生成汇总

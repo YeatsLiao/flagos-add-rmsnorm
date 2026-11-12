@@ -37,3 +37,22 @@
 | bfloat16 | 64 | 8 | 0.753 ms | 178.2 GB/s |
 | bfloat16 | 128 | 8 | 0.522 ms | 257.2 GB/s |
 | bfloat16 | 256 | 8 | 0.459 ms | 292.1 GB/s |
+
+## 补充形状：N=8192
+
+| dtype | shape | stepwise | two_kernel | fused | fused_bw | speedup |
+|---|---|---:|---:|---:|---:|---:|
+| float32 | 4096×8192 | 4.690 ms | 2.828 ms | 1.875 ms | 286.4 GB/s | 1.51× |
+| bfloat16 | 4096×8192 | 6.070 ms | 1.414 ms | 0.934 ms | 287.6 GB/s | 1.51× |
+
+## Kernel Launch 开销
+
+独立一轮运行，空 kernel 计时 500 次，其余 200 次。
+
+| 项 | 时间 |
+|---|---:|
+| 空 kernel，grid=1 | 13.19 µs |
+| 空 kernel，grid=4096 | 13.00 µs |
+| 融合 kernel | 0.962 ms |
+| add + 原生 rms_norm | 1.420 ms |
+| 分步 eager | 2.367 ms |

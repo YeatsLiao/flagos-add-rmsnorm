@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# local-only article assets, logs and docs
+article/
+docs/
+images/
+logs/
+results/make_screenshots.py
+
+# one-off local scripts
+scripts/pipeline.sh
+scripts/mirror_speed.py

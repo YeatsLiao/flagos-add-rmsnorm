@@ -47,6 +47,18 @@
 | float32 | 4096×8192 | 4.690 ms | 2.828 ms | 1.875 ms | 286.4 GB/s | 1.51× |
 | bfloat16 | 4096×8192 | 6.070 ms | 1.414 ms | 0.934 ms | 287.6 GB/s | 1.51× |
 
+## Nsight Compute 实测
+
+Nsight Compute 2024.1.1，`--clock-control none`，ECC 开启，单次 kernel launch 计数。
+
+| shape | dtype | duration | DRAM % | DRAM read / write | 物理/理想 4-pass | regs/thread | occupancy |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 4096×4096 | float32 | 0.796 ms | 93.7% | 154.5 / 155.4 MB | 1.15× | 43 | 79.1% |
+| 4096×4096 | bfloat16 | 0.402 ms | 93.9% | 78.6 / 78.2 MB | 1.17× | 40 | 95.0% |
+| 4096×8192 | float32 | —（时钟浮动） | 92.5% | 333.1 / 338.1 MB | 1.25× | 74 | 47.6% |
+
+ncu 报告 DRAM 频率 6.49 GHz（12.98 Gbps × 256 bit / 8 ≈ 415.6 GB/s）。ECC 开启使物理流量比理想 4-pass 高 15–17%；N=8192 高 25%，寄存器升到 74/线程，占用率降到 47.6%。手工 Roofline 的 72% 按 448 GB/s 规格峰值和理想流量计算，ncu 的 93.7% 按实际 DRAM 峰值和物理流量计算。
+
 ## FlagGems 5.0.2 对照
 
 同进程、预热 50 次、计时 200 次、重复 3 轮取中位数。FlagGems 原地执行、不分配输出；本文为公开 API，每次调用分配 `out` / `new_r`。本轮 GPU SM 频率 1560 MHz，绝对延迟不能和上表混用，只比较同轮倍率。

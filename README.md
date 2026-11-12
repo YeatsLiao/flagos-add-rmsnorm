@@ -20,6 +20,8 @@ FlagOS 课程中的 Add + RMSNorm 融合算子实现与实测。用 Triton 写�
 
 FlagGems 5.0.2 对照（同进程、重复 3 轮取中位数）：f32 4096×4096 为 0.977 ms 对 1.052 ms（0.93×），bf16 0.504 ms 对 0.486 ms（1.04×），f32 4096×8192 为 2.013 ms 对 2.042 ms（0.99×）。FlagGems 原地执行、不分配输出，本文每次调用都分配 `out` / `new_r`，因此这个比较对本文不利。该轮 GPU SM 频率为 1560 MHz，绝对值不能和上表混用，只比较同轮倍率。
 
+Nsight Compute 2024.1.1 实测（`--clock-control none`，ECC 开启）：f32 4096×4096 的 DRAM 吞吐为 93.7%，物理读/写 154.5/155.4 MB，0.796 ms，43 寄存器/线程，79.1% 占用率；bf16 4096×4096 为 93.9%、0.402 ms；f32 4096×8192 为 92.5%，74 寄存器/线程，47.6% 占用率。手工 Roofline 的 72% 按 448 GB/s 规格值和 4-pass 理想流量计算；ncu 的 93.7% 按实际 DRAM 峰值（约 416 GB/s）和含 ECC 的物理流量计算。
+
 反向传播：两个 Triton kernel，f32 下 `grad_x` / `grad_r` 最大绝对误差 4.8e-07，`grad_w` 6.1e-05（相对最大梯度 2.7e-07）；4096×4096 两个反向 kernel 耗时 2.044 ms（f32）、1.400 ms（bf16）。
 
 ## 目录
@@ -33,6 +35,7 @@ src/
   launch_overhead.py       空 kernel launch 开销
   backward_add_rms_norm.py 反向 kernel 与 autograd 封装
   test_backward.py         反向正确性与耗时测试
+  profile_kernel.py        Nsight Compute 单次采样入口
   smoke_triton.py          Triton 编译链路冒烟测试
 scripts/
   setup_wsl.sh             WSL 环境安装
@@ -99,6 +102,16 @@ FlagGems 对照需要先安装 g++ 和 `flag-gems==5.0.2`（见 `src/bench_flag_
 
 ```bash
 python src/bench_flag_gems.py --repeats 3 --log logs/flag_gems_bench.log
+```
+
+Nsight Compute 采样（需要 Windows 侧开启 GPU 性能计数器权限）：
+
+```bash
+cd src
+ncu --clock-control none --kernel-name regex:fused_add_rms_norm_kernel \
+  --launch-skip 3 --launch-count 1 \
+  --metrics gpu__time_duration.sum,dram__bytes_read.sum,dram__bytes_write.sum,dram__throughput.avg.pct_of_peak_sustained_elapsed \
+  python profile_kernel.py --m 4096 --n 4096 --dtype float32
 ```
 
 ## 测试条件

@@ -9,7 +9,6 @@ docs/
 images/
 logs/
 results/make_screenshots.py
-results/make_roofline.py
 
 # one-off local scripts
 scripts/pipeline.sh

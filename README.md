@@ -1,5 +1,7 @@
 # flagos-add-rmsnorm
 
+> Triton 实现的 Add + RMSNorm 单次读写融合 kernel。4096×4096 f32 从 1.224 ms 降到 0.828 ms（1.48×），bf16 0.409 ms（1.49×）；含 FlagGems 5.0.2 对照、反向传播和 Nsight Compute 实测。
+
 FlagOS 课程中的 Add + RMSNorm 融合算子实现与实测。用 Triton 写一个单次读写的融合 kernel，与 PyTorch 分步实现、`add` + 原生 `rms_norm` 两 kernel 做正确性和性能对比。
 
 ## 实测结果
